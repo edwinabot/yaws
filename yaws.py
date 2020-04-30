@@ -1,6 +1,8 @@
 import sqlite3
 import os
 
+import click
+
 
 class Settings:
     def __init__(self, crawl_path, domains, requests, concurrency, schedule):
@@ -26,7 +28,12 @@ def main():
         start_crawl(settings)
 
 
-def create_new_crawl(matches) -> Settings:
+@click.command()
+@click.option("--crawl-path", "-p", help="Destination path for the crawl.")
+@click.option(
+    "--domain", "-d", multiple=True, help="Domain to be crawled. Allows multiple."
+)
+def create_new_crawl(crawl_path, domain) -> Settings:
     print("Creating a new crawl")
 
     domains = []
@@ -119,3 +126,7 @@ def build_crawl_settings(
 ) -> Settings:
     settings = Settings(crawl_path, domains, requests, concurrency, schedule_expression)
     return settings
+
+
+if __name__ == "__main__":
+    main()

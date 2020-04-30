@@ -8,6 +8,7 @@ black = "*"
 flake8 = "*"
 
 [packages]
+click = "*"
 
 [requires]
 python_version = "3.7"
