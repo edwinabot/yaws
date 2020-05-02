@@ -20,37 +20,47 @@ class Visit:
         self.status_code = status_code
 
 
+@click.group()
 def main():
-    new_crawl = True
-    matches = None
-    if new_crawl:
-        settings = create_new_crawl(matches)
-        start_crawl(settings)
+    pass
 
 
-@click.command()
-@click.option("--crawl-path", "-p", help="Destination path for the crawl.")
+@click.command(name="new")
 @click.option(
-    "--domain", "-d", multiple=True, help="Domain to be crawled. Allows multiple."
+    "--crawl-path", "-p", required=True, help="Destination path for the crawl."
 )
-def create_new_crawl(crawl_path, domain) -> Settings:
+@click.option(
+    "--domain",
+    "-d",
+    multiple=True,
+    required=True,
+    help="Domain to be crawled. Allows multiple.",
+)
+@click.option(
+    "--max-requests", "-r", default=10, help="Maximum number of requests on each visit."
+)
+@click.option(
+    "--max-concurrency",
+    "-c",
+    default=3,
+    help="Maximum number of concurrent requests on each visit.",
+)
+@click.option("--crontab", "-t", default="*,*", help="Cron based schedule.")
+def create_new_crawl(
+    crawl_path, domain, max_requests, max_concurrency, crontab
+) -> Settings:
     print("Creating a new crawl")
-
-    domains = []
-    crawl_path = ""
-    requests = 1
-    concurrency = 1
-    schedule = "*,*"
-
-    crawl_path = build_crawl_directory(matches.path)
-    domains.extend(matches.domains)
     settings = build_crawl_settings(
-        crawl_path, domains, requests, concurrency, schedule
+        crawl_path, domain, max_requests, max_concurrency, crontab
     )
-
+    crawl_path = build_crawl_directory(settings.crawl_path)
     create_database(settings)
-
     return settings
+
+
+@click.command(name="resume")
+def resume_crawl(*args, **kwargs):
+    pass
 
 
 def create_database(settings: Settings):
@@ -64,15 +74,16 @@ def create_database(settings: Settings):
     try:
         db.execute(
             (
-                "CREATE TABLE IF NOT EXISTS settings (",
-                "          setting  TEXT PRIMARY KEY,",
-                "          value    TEXT NOT NULL",
-                ") WITHOUT ROWID",
+                "CREATE TABLE IF NOT EXISTS settings ("
+                "          setting  TEXT PRIMARY KEY,"
+                "          value    TEXT NOT NULL"
+                ") WITHOUT ROWID"
             ),
             [],
         )
-    except:
+    except Exception as ex:
         print("Creating settings table: FAILED")
+        print(ex)
         exit(1)
     else:
         print("Creating settings table: OK")
@@ -81,16 +92,19 @@ def create_database(settings: Settings):
     print("Creating visits table...")
     try:
         db.execute(
-            '"CREATE TABLE IF NOT EXISTS visits (',
-            "    url             TEXT PRIMARY KEY,",
-            "    status_code     INTEGER,",
-            "    last_visit      TEXT,",
-            "    content         BLOB",
-            ') WITHOUT ROWID"',
+            (
+                "CREATE TABLE IF NOT EXISTS visits ("
+                "    url             TEXT PRIMARY KEY,"
+                "    status_code     INTEGER,"
+                "    last_visit      TEXT,"
+                "    content         BLOB"
+                ") WITHOUT ROWID"
+            ),
             [],
         )
-    except:
+    except Exception as ex:
         print("Creating visits table: FAILED")
+        print(ex)
         exit(1)
     else:
         print("Creating visits table: OK")
@@ -98,15 +112,34 @@ def create_database(settings: Settings):
     # Insert settings
 
     print("Populating settings table...")
-
-    print("Populating settings table: OK")
+    try:
+        setting_records = (
+            ("crawl_path", settings.crawl_path),
+            ("domains", ','.join(settings.domains)),
+            ("requests", settings.requests),
+            ("concurrency", settings.concurrency),
+            ("schedule", settings.schedule),
+        )
+        db.executemany(
+            "INSERT INTO settings (setting, value) VALUES (?, ?)", setting_records
+        )
+        db.commit()
+    except Exception as ex:
+        print("Populating visits table: FAILED")
+        print(ex)
+        exit(1)
+    else:
+        print("Populating visits table: OK")
 
     # Insert visits created from the target domains
     print("Populating visits table...")
     try:
-        db.executemany("INSERT INTO visits (url) VALUES (?)", settings.domains)
-    except:
+        records = [(d,) for d in settings.domains]
+        db.executemany("INSERT INTO visits (url) VALUES (?)", records)
+        db.commit()
+    except Exception as ex:
         print("Populating visits table: FAILED")
+        print(ex)
         exit(1)
     else:
         print("Populating visits table: OK")
@@ -129,4 +162,6 @@ def build_crawl_settings(
 
 
 if __name__ == "__main__":
+    main.add_command(create_new_crawl)
+    main.add_command(resume_crawl)
     main()
